@@ -2568,6 +2568,7 @@ def get_custom_deduplication_rule(tenant_id, provider_id, provider_type):
             .where(AlertDeduplicationRule.tenant_id == tenant_id)
             .where(AlertDeduplicationRule.provider_id == provider_id)
             .where(AlertDeduplicationRule.provider_type == provider_type)
+            .order_by(AlertDeduplicationRule.priority.desc())
         ).first()
     return rule
 

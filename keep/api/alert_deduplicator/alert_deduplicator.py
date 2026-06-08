@@ -514,7 +514,7 @@ class AlertDeduplicator:
             fingerprint_fields=rule.fingerprint_fields,
             full_deduplication=rule.full_deduplication,
             ignore_fields=rule.ignore_fields or [],
-            priority=0,
+            priority=rule.priority,
         )
 
         return new_rule
@@ -571,7 +571,7 @@ class AlertDeduplicator:
             fingerprint_fields=rule.fingerprint_fields,
             full_deduplication=rule.full_deduplication,
             ignore_fields=rule.ignore_fields or [],
-            priority=0,
+            priority=rule.priority,
         )
 
         return updated_rule

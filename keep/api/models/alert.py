@@ -399,6 +399,7 @@ class DeduplicationRuleDto(BaseModel):
     full_deduplication: bool
     ignore_fields: list[str]
     is_provisioned: bool
+    priority: int = 0
 
 
 class DeduplicationRuleRequestDto(BaseModel):
@@ -409,6 +410,7 @@ class DeduplicationRuleRequestDto(BaseModel):
     fingerprint_fields: list[str]
     full_deduplication: bool = False
     ignore_fields: Optional[list[str]] = None
+    priority: int = 0
 
 
 class EnrichIncidentRequestBody(BaseModel):

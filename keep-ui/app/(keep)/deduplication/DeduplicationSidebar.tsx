@@ -40,6 +40,7 @@ interface DeduplicationSidebarProps {
   onSubmit: (data: Partial<DeduplicationRule>) => Promise<void>;
   mutateDeduplicationRules: KeyedMutator<DeduplicationRule[]>;
   providers: { installed_providers: Providers; linked_providers: Providers };
+  deduplicationRules: DeduplicationRule[];
 }
 
 const DeduplicationSidebar: React.FC<DeduplicationSidebarProps> = ({
@@ -49,6 +50,7 @@ const DeduplicationSidebar: React.FC<DeduplicationSidebarProps> = ({
   onSubmit,
   mutateDeduplicationRules,
   providers,
+  deduplicationRules,
 }) => {
   const {
     control,
@@ -68,6 +70,7 @@ const DeduplicationSidebar: React.FC<DeduplicationSidebarProps> = ({
       fingerprint_fields: [],
       full_deduplication: false,
       ignore_fields: [],
+      priority: 0,
     },
   });
 
@@ -92,6 +95,18 @@ const DeduplicationSidebar: React.FC<DeduplicationSidebarProps> = ({
   const selectedProviderId = watch("provider_id");
   const fingerprintFields = watch("fingerprint_fields");
   const ignoreFields = watch("ignore_fields");
+  const priority = watch("priority");
+
+  const priorityConflict = useMemo(() => {
+    if (priority === undefined || priority === null) return null;
+    return deduplicationRules.find(
+      (r) =>
+        r.id !== selectedDeduplicationRule?.id &&
+        r.priority === Number(priority) &&
+        r.provider_type === selectedProviderType &&
+        (r.provider_id ?? null) === (selectedProviderId ?? null)
+    ) ?? null;
+  }, [priority, deduplicationRules, selectedDeduplicationRule, selectedProviderType, selectedProviderId]);
 
   const availableFields = useMemo(() => {
     const defaultFields = [
@@ -135,6 +150,7 @@ const DeduplicationSidebar: React.FC<DeduplicationSidebarProps> = ({
         fingerprint_fields: [],
         full_deduplication: false,
         ignore_fields: [],
+        priority: 0,
       });
     }
   }, [isOpen, selectedDeduplicationRule, reset]);
@@ -510,6 +526,48 @@ const DeduplicationSidebar: React.FC<DeduplicationSidebarProps> = ({
                   )}
                 </div>
               )}
+              <div>
+                <span className="text-sm font-medium text-gray-700 flex items-center mb-2">
+                  Priority
+                  <span className="ml-1 relative inline-flex items-center">
+                    <span className="group relative flex items-center">
+                      <Icon
+                        icon={InformationCircleIcon}
+                        className="w-[1em] h-[1em] text-gray-500"
+                      />
+                      <span className="absolute bottom-full left-1/2 transform -translate-x-1/2 p-2 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-300 w-80 text-center pointer-events-none group-hover:pointer-events-auto">
+                        Higher priority rules are evaluated first when multiple rules match the same provider. Use a higher number to ensure this rule takes precedence.
+                      </span>
+                    </span>
+                  </span>
+                </span>
+                <Controller
+                  name="priority"
+                  control={control}
+                  render={({ field }) => (
+                    <input
+                      type="number"
+                      min={0}
+                      disabled={!!selectedDeduplicationRule?.is_provisioned}
+                      value={field.value ?? 0}
+                      onChange={(e) =>
+                        field.onChange(parseInt(e.target.value, 10) || 0)
+                      }
+                      className="w-full rounded-tremor-default border border-tremor-border bg-tremor-background px-3 py-2 text-sm text-tremor-content-strong shadow-tremor-input focus:border-tremor-brand focus:outline-none focus:ring-2 focus:ring-tremor-brand-muted disabled:cursor-not-allowed disabled:opacity-50"
+                    />
+                  )}
+                />
+                {priorityConflict && (
+                  <Callout
+                    className="mt-2"
+                    title="Priority already in use"
+                    icon={ExclamationTriangleIcon}
+                    color="yellow"
+                  >
+                    Rule &quot;{priorityConflict.name}&quot; already uses priority {priority} for this provider. The rule with the highest priority is selected first — consider using a different value to make the order explicit.
+                  </Callout>
+                )}
+              </div>
             </div>
           </Card>
           {errors.root?.serverError && (
