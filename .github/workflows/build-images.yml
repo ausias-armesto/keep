@@ -1,14 +1,9 @@
-name: Build and Push Docker Images
+name: Build Hoprnet
 
 on:
   push:
     branches:
       - latest
-  workflow_dispatch:
-
-env:
-  REGISTRY: europe-west3-docker.pkg.dev/hoprassociation/docker-images
-
 jobs:
   build-frontend:
     name: Build Frontend
@@ -16,29 +11,24 @@ jobs:
     permissions:
       contents: read
       id-token: write
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # 6.0.3
+      - name: Setup GCP
+        uses: hoprnet/hopr-workflows/actions/setup-gcp@ac3e0b6137b0ba470a30c373aab2ceba9e0879e4
         with:
-          credentials_json: ${{ secrets.GCP_SA_GITHUB_RUNNER }}
-
-      - name: Configure Docker for Artifact Registry
-        run: gcloud auth configure-docker europe-west3-docker.pkg.dev --quiet
-
+          workload_identity_provider: ${{ vars.HOPRNET_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.HOPRNET_SERVICE_ACCOUNT }}
+          login_artifact_registry: 'true'
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # 4.1.0
       - name: Build and push frontend image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # 7.2.0
         with:
           context: keep-ui
           file: docker/Dockerfile.ui
           push: true
-          tags: ${{ env.REGISTRY }}/keep-ui:latest
+          tags: ${{ vars.HOPRNET_REGISTRY }}/keep-ui:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
@@ -50,28 +40,23 @@ jobs:
     permissions:
       contents: read
       id-token: write
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # 6.0.3
+      - name: Setup GCP
+        uses: hoprnet/hopr-workflows/actions/setup-gcp@ac3e0b6137b0ba470a30c373aab2ceba9e0879e4
         with:
-          credentials_json: ${{ secrets.GCP_SA_GITHUB_RUNNER }}
-
-      - name: Configure Docker for Artifact Registry
-        run: gcloud auth configure-docker europe-west3-docker.pkg.dev --quiet
-
+          workload_identity_provider: ${{ vars.HOPRNET_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.HOPRNET_SERVICE_ACCOUNT }}
+          login_artifact_registry: 'true'
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build and push backend image
-        uses: docker/build-push-action@v6
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # 4.1.0
+      - name: Build and push frontend image
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # 7.2.0
         with:
           context: .
           file: docker/Dockerfile.api
           push: true
-          tags: ${{ env.REGISTRY }}/keep-api:latest
+          tags: ${{ vars.HOPRNET_REGISTRY }}/keep-api:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
