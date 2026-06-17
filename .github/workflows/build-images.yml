@@ -6,6 +6,7 @@ on:
       - latest
       - feat/*
       - fix/*
+      - ausias/*
   workflow_dispatch:
 jobs:
   build-frontend:
