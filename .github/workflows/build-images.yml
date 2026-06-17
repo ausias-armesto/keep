@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - latest
+      - feat/*
+      - fix/*
+  workflow_dispatch:
 jobs:
   build-frontend:
     name: Build Frontend
