@@ -286,9 +286,12 @@ export const AlertsRulesBuilder = ({
   };
 
   useEffect(() => {
-    updateOutputCEL?.(appliedCel);
+    updateOutputCEL?.(celRules);
+  }, [celRules, updateOutputCEL]);
+
+  useEffect(() => {
     onCelChanges?.(appliedCel);
-  }, [appliedCel, updateOutputCEL]);
+  }, [appliedCel]);
 
   const onGenerateQuery = () => {
     setCELRules(formatQuery(query, "cel"));

@@ -46,6 +46,12 @@ export default function MaintenanceRulesTable({
       header: "",
       cell: (context) => (
         <div className={"space-x-1 flex flex-row items-center justify-center"}>
+          <Icon
+            icon={context.row.original.enabled ? IoCheckmark : HiMiniXMark}
+            size="md"
+            color={context.row.original.enabled ? "orange" : "red"}
+            tooltip={context.row.original.enabled ? "Enabled" : "Disabled"}
+          />
           <Button
             color="orange"
             size="xs"
@@ -77,7 +83,11 @@ export default function MaintenanceRulesTable({
     columnHelper.display({
       id: "description",
       header: "Description",
-      cell: (context) => context.row.original.description,
+      cell: (context) => (
+        <div className="max-w-[200px] whitespace-normal break-words">
+          {context.row.original.description}
+        </div>
+      ),
     }),
     columnHelper.display({
       id: "start_time",
@@ -97,19 +107,6 @@ export default function MaintenanceRulesTable({
         context.row.original.end_time
           ? new Date(context.row.original.end_time + "Z").toLocaleString()
           : "N/A",
-    }),
-    columnHelper.display({
-      id: "enabled",
-      header: "Enabled",
-      cell: (context) => (
-        <div>
-          {context.row.original.enabled ? (
-            <Icon icon={IoCheckmark} size="md" color="orange" />
-          ) : (
-            <Icon icon={HiMiniXMark} size="md" color="orange" />
-          )}
-        </div>
-      ),
     }),
   ] as DisplayColumnDef<MaintenanceRule>[];
 
@@ -179,22 +176,17 @@ export default function MaintenanceRulesTable({
                       <span className="font-bold">Created By:</span>
                       <span>{row.original.created_by}</span>
                     </div>
-                    {row.original.updated_at && (
-                      <>
+                    {(() => {
+                      const d = row.original.updated_at
+                        ? new Date(row.original.updated_at + "Z")
+                        : null;
+                      return d && !isNaN(d.getTime()) ? (
                         <div className="flex items-center space-x-2 pl-2.5">
                           <span className="font-bold">Updated At:</span>
-                          <span>
-                            {new Date(
-                              row.original.updated_at + "Z"
-                            ).toLocaleString()}
-                          </span>
+                          <span>{d.toLocaleString()}</span>
                         </div>
-                        <div className="flex items-center space-x-2 pl-2.5">
-                          <span className="font-bold">Enabled:</span>
-                          <span>{row.original.enabled ? "Yes" : "No"}</span>
-                        </div>
-                      </>
-                    )}
+                      ) : null;
+                    })()}
                   </div>
                 </TableCell>
               </TableRow>

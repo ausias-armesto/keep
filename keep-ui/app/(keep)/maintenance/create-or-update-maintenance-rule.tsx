@@ -62,7 +62,17 @@ export default function CreateOrUpdateMaintenanceRule({
       setEnabled(maintenanceToEdit.enabled);
       setIgnoreStatuses(maintenanceToEdit.ignore_statuses);
       if (maintenanceToEdit.duration_seconds) {
-        setEndInterval(maintenanceToEdit.duration_seconds / 60);
+        const seconds = maintenanceToEdit.duration_seconds;
+        if (seconds % (60 * 60 * 24) === 0) {
+          setEndInterval(seconds / (60 * 60 * 24));
+          setIntervalType("days");
+        } else if (seconds % (60 * 60) === 0) {
+          setEndInterval(seconds / (60 * 60));
+          setIntervalType("hours");
+        } else {
+          setEndInterval(seconds / 60);
+          setIntervalType("minutes");
+        }
       }
     }
   }, [maintenanceToEdit]);
