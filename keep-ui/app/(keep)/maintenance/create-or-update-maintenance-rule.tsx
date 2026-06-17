@@ -197,7 +197,7 @@ export default function CreateOrUpdateMaintenanceRule({
       <div className="mt-2.5">
         <AlertsRulesBuilder
           key={maintenanceToEdit?.id ?? "create"}
-          defaultQuery={celQuery}
+          defaultQuery={maintenanceToEdit?.cel_query ?? celQuery}
           updateOutputCEL={setCelQuery}
           showSave={false}
           showSqlImport={false}
