@@ -84,7 +84,7 @@ export default function MaintenanceRulesTable({
       id: "description",
       header: "Description",
       cell: (context) => (
-        <div className="max-w-[200px] whitespace-normal break-words">
+        <div className="min-w-[200px] max-w-[350px] whitespace-normal break-words">
           {context.row.original.description}
         </div>
       ),
@@ -92,8 +92,15 @@ export default function MaintenanceRulesTable({
     columnHelper.display({
       id: "start_time",
       header: "Start Time",
-      cell: (context) =>
-        new Date(context.row.original.start_time + "Z").toLocaleString(),
+      cell: (context) => {
+        const d = new Date(context.row.original.start_time + "Z");
+        return (
+          <div>
+            <div>{d.toLocaleDateString()}</div>
+            <div className="text-xs text-gray-500">{d.toLocaleTimeString()}</div>
+          </div>
+        );
+      },
     }),
     columnHelper.display({
       id: "CEL",
@@ -103,10 +110,16 @@ export default function MaintenanceRulesTable({
     columnHelper.display({
       id: "end_time",
       header: "End Time",
-      cell: (context) =>
-        context.row.original.end_time
-          ? new Date(context.row.original.end_time + "Z").toLocaleString()
-          : "N/A",
+      cell: (context) => {
+        if (!context.row.original.end_time) return "N/A";
+        const d = new Date(context.row.original.end_time + "Z");
+        return (
+          <div>
+            <div>{d.toLocaleDateString()}</div>
+            <div className="text-xs text-gray-500">{d.toLocaleTimeString()}</div>
+          </div>
+        );
+      },
     }),
   ] as DisplayColumnDef<MaintenanceRule>[];
 
