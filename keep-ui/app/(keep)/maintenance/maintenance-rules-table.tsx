@@ -105,7 +105,11 @@ export default function MaintenanceRulesTable({
     columnHelper.display({
       id: "CEL",
       header: "CEL",
-      cell: (context) => context.row.original.cel_query,
+      cell: (context) => (
+        <div className="max-w-[350px] truncate" title={context.row.original.cel_query}>
+          {context.row.original.cel_query}
+        </div>
+      ),
     }),
     columnHelper.display({
       id: "end_time",
