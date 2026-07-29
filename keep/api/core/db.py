@@ -2139,10 +2139,32 @@ def update_user_role(tenant_id, username, role):
             .where(User.tenant_id == tenant_id)
             .where(User.username == username)
         ).first()
-        if user and user.role != role:
+        if not user:
+            return None
+        if user.role != role:
             user.role = role
             session.add(user)
             session.commit()
+            session.refresh(user)
+    return user
+
+
+def update_user_password(tenant_id, username, password):
+    from keep.api.models.db.user import User
+
+    password_hash = hashlib.sha256(password.encode()).hexdigest()
+    with Session(engine) as session:
+        user = session.exec(
+            select(User)
+            .where(User.tenant_id == tenant_id)
+            .where(User.username == username)
+        ).first()
+        if not user:
+            return None
+        user.password_hash = password_hash
+        session.add(user)
+        session.commit()
+        session.refresh(user)
     return user
 
 
