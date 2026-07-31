@@ -235,6 +235,41 @@ def test_resolved_representative_does_not_block_new_group(db_session, create_ale
     assert new_alert.event.get("correlated_to") is None
 
 
+def test_correlated_alert_keeps_state_when_it_resolves(db_session, create_alert):
+    """
+    A correlated (child) alert must keep its own is_correlated/correlated_to when
+    it resolves, even if by then every other member of its group (including the
+    representative) has already resolved too and no active representative can be
+    found anymore. Resolving isn't a new correlation decision - it should carry
+    forward whatever this alert already had while it was active, not get reset
+    to "uncorrelated".
+    """
+    _add_rule(db_session, "correlate", ["name"])
+
+    create_alert("fp-keep-rep", AlertStatus.FIRING, datetime.utcnow(), _alert_details("same-alert-keep"))
+    create_alert("fp-keep-child", AlertStatus.FIRING, datetime.utcnow(), _alert_details("same-alert-keep"))
+
+    child_firing = db_session.query(Alert).filter(Alert.fingerprint == "fp-keep-child").first()
+    assert child_firing.event.get("is_correlated") is True
+    assert child_firing.event.get("correlated_to") == "fp-keep-rep"
+
+    # The representative resolves first - no longer a valid "active representative".
+    create_alert("fp-keep-rep", AlertStatus.RESOLVED, datetime.utcnow(), _alert_details("same-alert-keep"))
+
+    # Now the child resolves too. At this point, get_last_alert_by_correlation_fingerprint
+    # would find no active representative at all (everyone in the group has resolved).
+    create_alert("fp-keep-child", AlertStatus.RESOLVED, datetime.utcnow(), _alert_details("same-alert-keep"))
+
+    child_resolved = (
+        db_session.query(Alert)
+        .filter(Alert.fingerprint == "fp-keep-child")
+        .order_by(Alert.timestamp.desc())
+        .first()
+    )
+    assert child_resolved.event.get("is_correlated") is True
+    assert child_resolved.event.get("correlated_to") == "fp-keep-rep"
+
+
 def test_no_correlate_rule_no_correlation_fingerprint(db_session, create_alert):
     """Without a correlate rule, correlation_fingerprint is not set on the alert."""
     # No correlate rule added

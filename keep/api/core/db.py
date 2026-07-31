@@ -5745,6 +5745,35 @@ def get_last_alert_by_correlation_fingerprint(
     return last_alert.fingerprint if last_alert else None
 
 
+def get_last_alert_correlation_state_by_fingerprint(
+    tenant_id: str, fingerprint: str
+) -> tuple[bool, Optional[str]]:
+    """Return (is_correlated, correlated_to) as last stored for this exact fingerprint.
+
+    Used to carry an alert's correlation state forward across its own status
+    transitions (e.g. firing -> resolved), instead of re-deriving it from
+    get_last_alert_by_correlation_fingerprint, which only considers currently
+    active alerts and would otherwise reset an alert's own resolve/suppress
+    event back to "uncorrelated" once every other group member has also
+    resolved.
+    """
+    with Session(engine) as session:
+        last_alert = session.exec(
+            select(LastAlert)
+            .where(LastAlert.tenant_id == tenant_id)
+            .where(LastAlert.fingerprint == fingerprint)
+        ).first()
+        if not last_alert:
+            return False, None
+        alert = session.get(Alert, last_alert.alert_id)
+        if not alert:
+            return False, None
+        return (
+            bool(alert.event.get("is_correlated", False)),
+            alert.event.get("correlated_to"),
+        )
+
+
 def set_last_alert(
     tenant_id: str, alert: Alert, session: Optional[Session] = None, max_retries=3
 ) -> None:
