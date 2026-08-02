@@ -5725,20 +5725,40 @@ def get_last_alert_by_fingerprint(
 def get_last_alert_by_correlation_fingerprint(
     tenant_id: str, correlation_fingerprint: str
 ) -> Optional[str]:
-    """Return the fingerprint of the oldest active alert in a correlation group.
+    """Return the fingerprint of the oldest eligible alert in a correlation group.
 
     Ordering by first_timestamp ASC gives a stable representative even after
-    subsequent group members are stored. Resolved and suppressed alerts are
-    excluded so they don't block new firings from starting a fresh group.
+    subsequent group members are stored. An active (non-resolved/suppressed)
+    alert is always eligible. A resolved/suppressed alert is also eligible if
+    it's linked to an incident that is itself still open (firing/acknowledged)
+    - this keeps the representative anchored to that alert (and its incident)
+    instead of resetting to whichever alert fires next once every group
+    member has resolved. A resolved/suppressed alert with no incident link,
+    or whose linked incident is itself closed, stays excluded - that's a
+    genuinely separate, unrelated root cause, not a continuation.
     """
     with Session(engine) as session:
         status_field = get_json_extract_field(session, Alert.event, "status")
         last_alert = session.exec(
             select(LastAlert)
             .join(Alert, Alert.id == LastAlert.alert_id)
+            .outerjoin(
+                LastAlertToIncident,
+                and_(
+                    LastAlertToIncident.tenant_id == LastAlert.tenant_id,
+                    LastAlertToIncident.fingerprint == LastAlert.fingerprint,
+                    LastAlertToIncident.deleted_at == NULL_FOR_DELETED_AT,
+                ),
+            )
+            .outerjoin(Incident, Incident.id == LastAlertToIncident.incident_id)
             .where(LastAlert.tenant_id == tenant_id)
             .where(LastAlert.correlation_fingerprint == correlation_fingerprint)
-            .where(status_field.notin_(["resolved", "suppressed"]))
+            .where(
+                or_(
+                    status_field.notin_(["resolved", "suppressed"]),
+                    Incident.status.in_(IncidentStatus.get_active(return_values=True)),
+                )
+            )
             .order_by(LastAlert.first_timestamp)
             .limit(1)
         ).first()

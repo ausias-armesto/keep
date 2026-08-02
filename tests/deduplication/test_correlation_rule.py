@@ -13,10 +13,16 @@ from datetime import datetime
 
 import pytest
 
-from keep.api.core.db import get_last_alert_by_correlation_fingerprint, get_last_alerts
+from keep.api.core.db import (
+    add_alerts_to_incident,
+    get_last_alert_by_correlation_fingerprint,
+    get_last_alerts,
+)
 from keep.api.core.dependencies import SINGLE_TENANT_UUID
 from keep.api.models.alert import AlertDto, AlertStatus
 from keep.api.models.db.alert import Alert, AlertDeduplicationRule, AlertEnrichment, LastAlert
+from keep.api.models.db.incident import Incident, IncidentSeverity, IncidentStatus
+from keep.api.models.db.rule import ResolveOn
 from keep.api.tasks.process_event_task import process_event
 from keep.api.utils.enrichment_helpers import convert_db_alerts_to_dto_alerts
 from tests.fixtures.client import client, setup_api_key, test_app  # noqa
@@ -70,6 +76,26 @@ def _batch_alert(fingerprint, correlation_fingerprint, status=AlertStatus.FIRING
         source=["keep"],
         **extra,
     )
+
+
+def _create_incident(db_session, status):
+    """Insert a bare Incident row directly into the test DB.
+
+    resolve_on=NEVER so resolving its linked alert(s) doesn't auto-flip the
+    incident's own status as a side effect - these tests want full control
+    over the incident's status independent of alert lifecycle.
+    """
+    incident = Incident(
+        id=uuid.uuid4(),
+        tenant_id=SINGLE_TENANT_UUID,
+        status=status,
+        severity=IncidentSeverity.CRITICAL.order,
+        user_generated_name="Test Incident",
+        resolve_on=ResolveOn.NEVER.value,
+    )
+    db_session.add(incident)
+    db_session.flush()
+    return incident
 
 
 def _process_batch(events):
@@ -232,6 +258,55 @@ def test_resolved_representative_does_not_block_new_group(db_session, create_ale
 
     new_alert = db_session.query(Alert).filter(Alert.fingerprint == "fp-new").first()
     assert new_alert.event.get("is_correlated") == False
+    assert new_alert.event.get("correlated_to") is None
+
+
+def test_resolved_representative_with_open_incident_still_correlates(db_session, create_alert):
+    """
+    A resolved representative that's linked to a still-open incident (firing or
+    acknowledged) must remain eligible. A new firing alert with the same
+    correlation_fingerprint should correlate to it, so recurrences keep
+    anchoring to the incident-linked alert instead of resetting to a fresh
+    group every time the representative happens to resolve.
+    """
+    _add_rule(db_session, "correlate", ["name"])
+
+    create_alert("fp-open-rep", AlertStatus.FIRING, datetime.utcnow(), _alert_details("same-alert-open"))
+    rep = db_session.query(Alert).filter(Alert.fingerprint == "fp-open-rep").first()
+
+    incident = _create_incident(db_session, IncidentStatus.FIRING.value)
+    add_alerts_to_incident(SINGLE_TENANT_UUID, incident, [rep.fingerprint], session=db_session)
+
+    create_alert("fp-open-rep", AlertStatus.RESOLVED, datetime.utcnow(), _alert_details("same-alert-open"))
+
+    create_alert("fp-open-new", AlertStatus.FIRING, datetime.utcnow(), _alert_details("same-alert-open"))
+
+    new_alert = db_session.query(Alert).filter(Alert.fingerprint == "fp-open-new").first()
+    assert new_alert.event.get("is_correlated") is True
+    assert new_alert.event.get("correlated_to") == "fp-open-rep"
+
+
+def test_resolved_representative_with_closed_incident_does_not_correlate(db_session, create_alert):
+    """
+    A resolved representative whose linked incident is itself closed (resolved)
+    must NOT be treated as eligible - that's a genuinely separate, unrelated
+    root cause (e.g. the same alertname firing again months later), not a
+    continuation of the old incident.
+    """
+    _add_rule(db_session, "correlate", ["name"])
+
+    create_alert("fp-closed-rep", AlertStatus.FIRING, datetime.utcnow(), _alert_details("same-alert-closed"))
+    rep = db_session.query(Alert).filter(Alert.fingerprint == "fp-closed-rep").first()
+
+    incident = _create_incident(db_session, IncidentStatus.RESOLVED.value)
+    add_alerts_to_incident(SINGLE_TENANT_UUID, incident, [rep.fingerprint], session=db_session)
+
+    create_alert("fp-closed-rep", AlertStatus.RESOLVED, datetime.utcnow(), _alert_details("same-alert-closed"))
+
+    create_alert("fp-closed-new", AlertStatus.FIRING, datetime.utcnow(), _alert_details("same-alert-closed"))
+
+    new_alert = db_session.query(Alert).filter(Alert.fingerprint == "fp-closed-new").first()
+    assert new_alert.event.get("is_correlated") is False
     assert new_alert.event.get("correlated_to") is None
 
 
