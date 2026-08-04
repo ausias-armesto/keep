@@ -1839,6 +1839,53 @@ def test_get_incidents_by_cel_is_visible_filter(db_session):
     assert len(not_visible_only) == 1
     assert not_visible_only[0].user_generated_name == "Not Visible Incident"
 
+def test_get_all_incidents_status_filter_excludes_deleted(db_session):
+    """
+    GET /incidents?status=firing&status=acknowledged must not return incidents
+    whose actual status is "deleted" (or anything else outside the requested
+    set) - the status query param needs to actually be applied as a filter,
+    not just parsed and discarded.
+    """
+    from keep.api.routes.incidents import get_all_incidents
+
+    firing = create_incident_from_dict(
+        SINGLE_TENANT_UUID,
+        {
+            "user_generated_name": "Firing Incident",
+            "user_summary": "Test firing summary",
+            "generated_summary": "Test firing summary gen",
+            "status": IncidentStatus.FIRING.value,
+            "is_visible": True,
+        },
+    )
+    deleted = create_incident_from_dict(
+        SINGLE_TENANT_UUID,
+        {
+            "user_generated_name": "Deleted Incident",
+            "user_summary": "Test deleted summary",
+            "generated_summary": "Test deleted summary gen",
+            "status": IncidentStatus.DELETED.value,
+            "is_visible": True,
+        },
+    )
+
+    auth = AuthenticatedEntity(tenant_id=SINGLE_TENANT_UUID, email="test")
+    result = get_all_incidents(
+        status=[IncidentStatus.FIRING, IncidentStatus.ACKNOWLEDGED],
+        severity=None,
+        assignees=None,
+        sources=None,
+        affected_services=None,
+        authenticated_entity=auth,
+        cel=None,
+    )
+
+    returned_ids = {str(item.id) for item in result.items}
+    assert str(firing.id) in returned_ids
+    assert str(deleted.id) not in returned_ids
+    assert result.count == 1
+
+
 def test_incident_not_created_maintenance(
     db_session,
     create_alert,

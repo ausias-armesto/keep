@@ -406,6 +406,7 @@ class IncidentBl:
         is_predicted: bool = None,
         cel: str = None,
         allowed_incident_ids: Optional[List[str]] = None,
+        filters: Optional[dict] = None,
     ):
         incidents, total_count = get_last_incidents_by_cel(
             tenant_id=tenant_id,
@@ -420,6 +421,7 @@ class IncidentBl:
             is_predicted=is_predicted,
             cel=cel,
             allowed_incident_ids=allowed_incident_ids,
+            filters=filters,
         )
         incidents_dto = []
         for incident in incidents:

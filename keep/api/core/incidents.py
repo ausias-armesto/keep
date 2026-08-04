@@ -19,7 +19,7 @@ from keep.api.core.cel_to_sql.sql_providers.base import CelToSqlException
 from keep.api.core.cel_to_sql.sql_providers.get_cel_to_sql_provider_for_dialect import (
     get_cel_to_sql_provider,
 )
-from keep.api.core.db import engine, enrich_incidents_with_alerts
+from keep.api.core.db import apply_incident_filters, engine, enrich_incidents_with_alerts
 from keep.api.core.facets import get_facet_options, get_facets
 from keep.api.models.db.alert import (
     Alert,
@@ -474,6 +474,7 @@ def get_last_incidents_by_cel(
     is_predicted: bool = None,
     cel: str = None,
     allowed_incident_ids: Optional[List[str]] = None,
+    filters: Optional[dict] = None,
 ) -> Tuple[list[Incident], int]:
     """
     Retrieve the last incidents for a given tenant based on various filters and criteria.
@@ -490,6 +491,8 @@ def get_last_incidents_by_cel(
         is_predicted (bool, optional): Filter for predicted incidents. Defaults to None.
         cel (str, optional): The CEL (Common Event Language) filter. Defaults to None.
         allowed_incident_ids (Optional[List[str]], optional): A list of allowed incident IDs to filter by. Defaults to None.
+        filters (Optional[dict], optional): Extra incident filters (status/severity/assignee/
+            sources/affected_services), same shape as ALLOWED_INCIDENT_FILTERS. Defaults to None.
     Returns:
         Tuple[list[Incident], int]: A tuple containing a list of incidents and the total count of incidents.
     """
@@ -519,6 +522,11 @@ def get_last_incidents_by_cel(
                 cel=cel,
                 allowed_incident_ids=allowed_incident_ids,
             )
+            if filters:
+                total_count_query = apply_incident_filters(
+                    session, filters, total_count_query
+                )
+                sql_query = apply_incident_filters(session, filters, sql_query)
         except CelToSqlException as e:
             if isinstance(e.__cause__, PropertiesMappingException):
                 # if there is an error in mapping properties, return empty list

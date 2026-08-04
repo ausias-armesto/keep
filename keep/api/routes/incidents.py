@@ -189,6 +189,7 @@ def get_all_incidents(
             sorting=sorting,
             cel=cel,
             allowed_incident_ids=allowed_incident_ids,
+            filters=filters,
         )
         logger.info(
             "Fetched incidents from DB",
