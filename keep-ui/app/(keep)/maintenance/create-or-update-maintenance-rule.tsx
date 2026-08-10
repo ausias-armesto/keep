@@ -206,6 +206,7 @@ export default function CreateOrUpdateMaintenanceRule({
       </div>
 
       <div className="mt-2.5">
+        <Text>Ignore Alerts with Status</Text>
         <MultiSelect value={ignoreStatuses} onValueChange={setIgnoreStatuses}>
           {Object.values(Status).map((value) => {
             return <MultiSelectItem key={value} value={value}>{capitalize(value)}</MultiSelectItem>
