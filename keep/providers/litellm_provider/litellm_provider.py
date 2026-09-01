@@ -60,6 +60,19 @@ class LitellmProvider(BaseProvider):
         """Format the prompt as a chat message."""
         return [{"role": "user", "content": prompt}]
 
+    @staticmethod
+    def _strip_code_fence(text: str) -> str:
+        """Unwrap a ```json ... ``` fence, which models add unprompted."""
+        stripped = text.strip()
+        if not stripped.startswith("```"):
+            return text
+        stripped = stripped[3:]
+        if stripped.lower().startswith("json"):
+            stripped = stripped[4:]
+        if stripped.endswith("```"):
+            stripped = stripped[:-3]
+        return stripped.strip()
+
     def _query(
         self,
         prompt: str,
@@ -102,20 +115,40 @@ class LitellmProvider(BaseProvider):
             # Extract the generated text from the response
             try:
                 generated_text = result["choices"][0]["message"]["content"]
-            except KeyError:
+            except (KeyError, IndexError):
                 generated_text = ""
+
+            # Reasoning models return content=None when the whole max_tokens
+            # budget went into reasoning tokens. Without this the step would
+            # silently succeed with {"response": None}.
+            if generated_text is None:
+                finish_reason = result["choices"][0].get("finish_reason")
+                raise ProviderException(
+                    "LiteLLM API returned no content "
+                    f"(finish_reason={finish_reason!r}). Reasoning models can "
+                    "spend the whole max_tokens budget on reasoning tokens; "
+                    "raise max_tokens or use a model that does not reason."
+                )
 
             # Try to parse as JSON if it's meant to be structured
             if structured_output_format:
                 try:
-                    generated_text = json.loads(generated_text)
+                    generated_text = json.loads(self._strip_code_fence(generated_text))
                 except json.JSONDecodeError:
                     raise ProviderException(
                         f"Failed to parse generated text as JSON: {generated_text}. Model not following the structured output format. Response: {result}"
                     )
 
+            # Surface usage so a workflow can report what a run cost. Absent
+            # on some OpenAI-compatible backends, hence the .get() chain.
+            usage = result.get("usage") or {}
             return {
                 "response": generated_text,
+                "model": result.get("model", model),
+                "prompt_tokens": usage.get("prompt_tokens"),
+                "completion_tokens": usage.get("completion_tokens"),
+                "total_tokens": usage.get("total_tokens"),
+                "cost": usage.get("cost"),
             }
 
         except requests.exceptions.RequestException as e:
