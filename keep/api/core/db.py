@@ -5725,40 +5725,33 @@ def get_last_alert_by_fingerprint(
 def get_last_alert_by_correlation_fingerprint(
     tenant_id: str, correlation_fingerprint: str
 ) -> Optional[str]:
-    """Return the fingerprint of the oldest eligible alert in a correlation group.
+    """Return the fingerprint of the oldest active alert in a correlation group.
 
     Ordering by first_timestamp ASC gives a stable representative even after
-    subsequent group members are stored. An active (non-resolved/suppressed)
-    alert is always eligible. A resolved/suppressed alert is also eligible if
-    it's linked to an incident that is itself still open (firing/acknowledged)
-    - this keeps the representative anchored to that alert (and its incident)
-    instead of resetting to whichever alert fires next once every group
-    member has resolved. A resolved/suppressed alert with no incident link,
-    or whose linked incident is itself closed, stays excluded - that's a
-    genuinely separate, unrelated root cause, not a continuation.
+    subsequent group members are stored. Only a currently-active
+    (non-resolved/suppressed) alert is eligible as a representative.
+
+    A resolved/suppressed alert is never eligible, even if it's still linked
+    to an incident that itself hasn't been resolved: a `correlate` rule's
+    fingerprint_fields are often intentionally broad (e.g. just namespace +
+    app name) so that several *different* alert types sharing a root cause
+    join the same incident. If a resolved alert were kept eligible while its
+    incident stays open, an unrelated new alert type that later happens to
+    share that broad fingerprint would get silently attached to that old,
+    already-closed-in-practice alert's lineage instead of being recognized as
+    a fresh, independent problem. Once nothing in the group is still active,
+    the next alert to arrive starts a new group and becomes the new
+    representative going forward - a resolved alert never permanently blocks
+    a group from re-forming around a fresh active alert.
     """
     with Session(engine) as session:
         status_field = get_json_extract_field(session, Alert.event, "status")
         last_alert = session.exec(
             select(LastAlert)
             .join(Alert, Alert.id == LastAlert.alert_id)
-            .outerjoin(
-                LastAlertToIncident,
-                and_(
-                    LastAlertToIncident.tenant_id == LastAlert.tenant_id,
-                    LastAlertToIncident.fingerprint == LastAlert.fingerprint,
-                    LastAlertToIncident.deleted_at == NULL_FOR_DELETED_AT,
-                ),
-            )
-            .outerjoin(Incident, Incident.id == LastAlertToIncident.incident_id)
             .where(LastAlert.tenant_id == tenant_id)
             .where(LastAlert.correlation_fingerprint == correlation_fingerprint)
-            .where(
-                or_(
-                    status_field.notin_(["resolved", "suppressed"]),
-                    Incident.status.in_(IncidentStatus.get_active(return_values=True)),
-                )
-            )
+            .where(status_field.notin_(["resolved", "suppressed"]))
             .order_by(LastAlert.first_timestamp)
             .limit(1)
         ).first()

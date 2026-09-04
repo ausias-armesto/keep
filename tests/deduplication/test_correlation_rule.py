@@ -261,13 +261,16 @@ def test_resolved_representative_does_not_block_new_group(db_session, create_ale
     assert new_alert.event.get("correlated_to") is None
 
 
-def test_resolved_representative_with_open_incident_still_correlates(db_session, create_alert):
+def test_resolved_representative_with_open_incident_does_not_correlate(db_session, create_alert):
     """
-    A resolved representative that's linked to a still-open incident (firing or
-    acknowledged) must remain eligible. A new firing alert with the same
-    correlation_fingerprint should correlate to it, so recurrences keep
-    anchoring to the incident-linked alert instead of resetting to a fresh
-    group every time the representative happens to resolve.
+    A resolved representative must NOT be treated as an eligible correlation
+    target even if it's still linked to an incident that itself hasn't been
+    resolved. `correlate` rules commonly use broad fingerprint_fields (e.g.
+    namespace + app name) precisely so that several *different* alert types
+    sharing a root cause join the same incident - so an open-but-inactive
+    incident must not keep pulling in brand-new, unrelated alert types that
+    later happen to share that broad fingerprint. A new firing alert with the
+    same correlation_fingerprint must start a fresh group instead.
     """
     _add_rule(db_session, "correlate", ["name"])
 
@@ -282,8 +285,8 @@ def test_resolved_representative_with_open_incident_still_correlates(db_session,
     create_alert("fp-open-new", AlertStatus.FIRING, datetime.utcnow(), _alert_details("same-alert-open"))
 
     new_alert = db_session.query(Alert).filter(Alert.fingerprint == "fp-open-new").first()
-    assert new_alert.event.get("is_correlated") is True
-    assert new_alert.event.get("correlated_to") == "fp-open-rep"
+    assert new_alert.event.get("is_correlated") is False
+    assert new_alert.event.get("correlated_to") is None
 
 
 def test_resolved_representative_with_closed_incident_does_not_correlate(db_session, create_alert):
@@ -308,6 +311,100 @@ def test_resolved_representative_with_closed_incident_does_not_correlate(db_sess
     new_alert = db_session.query(Alert).filter(Alert.fingerprint == "fp-closed-new").first()
     assert new_alert.event.get("is_correlated") is False
     assert new_alert.event.get("correlated_to") is None
+
+
+def test_unrelated_alert_type_does_not_correlate_to_resolved_alert_with_open_incident(
+    db_session, create_alert
+):
+    """
+    Regression test for a real production bug.
+
+    A `correlate` rule intentionally uses broad fingerprint_fields (namespace +
+    app label) so several *different*, related alert types in the same
+    namespace join one incident. `CtdappRunwayTooShort` fires, gets linked to
+    an incident, then resolves - but its incident is left open (firing). Weeks
+    later, a completely unrelated alert type, `CtdappRelayerOverRedeeming`,
+    starts firing in the same namespace and happens to share the same broad
+    correlation fingerprint (both fall back to app_kubernetes_io_name=unknown).
+
+    It must NOT be silently attached to the old, resolved alert's lineage just
+    because that alert's incident technically remains open - it should be
+    treated as a fresh, independent alert and start a new group.
+    """
+    _add_rule(db_session, "correlate", ["namespace", "app_kubernetes_io_name"])
+
+    create_alert(
+        "fp-runway-too-short",
+        AlertStatus.FIRING,
+        datetime.utcnow(),
+        _alert_details(
+            "CtdappRunwayTooShort",
+            namespace="ctdapp",
+            app_kubernetes_io_name="unknown",
+        ),
+    )
+    runway_alert = (
+        db_session.query(Alert).filter(Alert.fingerprint == "fp-runway-too-short").first()
+    )
+
+    incident = _create_incident(db_session, IncidentStatus.FIRING.value)
+    add_alerts_to_incident(
+        SINGLE_TENANT_UUID, incident, [runway_alert.fingerprint], session=db_session
+    )
+
+    # CtdappRunwayTooShort resolves, but its incident stays open (as it does in
+    # production - resolving an alert doesn't automatically resolve its incident).
+    create_alert(
+        "fp-runway-too-short",
+        AlertStatus.RESOLVED,
+        datetime.utcnow(),
+        _alert_details(
+            "CtdappRunwayTooShort",
+            namespace="ctdapp",
+            app_kubernetes_io_name="unknown",
+        ),
+    )
+
+    # Weeks later, an unrelated alert type fires in the same namespace, sharing
+    # the same broad correlation fingerprint but a different alertname.
+    create_alert(
+        "fp-relayer-over-redeeming",
+        AlertStatus.FIRING,
+        datetime.utcnow(),
+        _alert_details(
+            "CtdappRelayerOverRedeeming",
+            namespace="ctdapp",
+            app_kubernetes_io_name="unknown",
+        ),
+    )
+
+    new_alert = (
+        db_session.query(Alert)
+        .filter(Alert.fingerprint == "fp-relayer-over-redeeming")
+        .first()
+    )
+    assert new_alert.event.get("is_correlated") is False
+    assert new_alert.event.get("correlated_to") is None
+
+    # Steady state: the next alert sharing the fingerprint should now correlate
+    # to the fresh, active CtdappRelayerOverRedeeming - not to the old resolved
+    # CtdappRunwayTooShort and not fail to correlate at all. A resolved alert
+    # never permanently blocks a group from re-forming around a new active one.
+    create_alert(
+        "fp-another-new-alert",
+        AlertStatus.FIRING,
+        datetime.utcnow(),
+        _alert_details(
+            "CtdappSomeOtherAlert",
+            namespace="ctdapp",
+            app_kubernetes_io_name="unknown",
+        ),
+    )
+    third_alert = (
+        db_session.query(Alert).filter(Alert.fingerprint == "fp-another-new-alert").first()
+    )
+    assert third_alert.event.get("is_correlated") is True
+    assert third_alert.event.get("correlated_to") == "fp-relayer-over-redeeming"
 
 
 def test_correlated_alert_keeps_state_when_it_resolves(db_session, create_alert):
