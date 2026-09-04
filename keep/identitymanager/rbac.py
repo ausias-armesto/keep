@@ -52,10 +52,10 @@ class Role:
         return True
 
 
-# Noc has read permissions and it can assign itself to alert
+# Noc has read permissions, write permissions on alerts/incidents, and it can assign itself to alert
 class Noc(Role):
-    SCOPES = ["read:*", "execute:workflows"]
-    DESCRIPTION = "read permissions and assign itself to alert"
+    SCOPES = ["read:*", "write:alert", "write:incident", "execute:workflows"]
+    DESCRIPTION = "read permissions, write access to alerts and incidents, and assign itself to alert"
 
 
 # Admin has all permissions
