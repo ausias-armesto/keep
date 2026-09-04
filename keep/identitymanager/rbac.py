@@ -81,9 +81,7 @@ class Noc(Role):
         "execute:workflows",
     ]
     DESCRIPTION = (
-        "read/write on alerts, incidents and maintenance windows; read-only "
-        "visibility into rules/extraction/actions/deduplications/metrics/workflows; "
-        "can execute workflows and assign itself to alerts"
+        "Can do daily operations on alerts, incidents and maintenance windows"
     )
 
 
