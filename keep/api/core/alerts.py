@@ -274,8 +274,9 @@ def __build_query_for_filtering(
         )
 
     if fetch_incidents or force_fetch:
-        # Fingerprint with active incidents subquery, i.e  in Firing status
-        firing_subq = (
+        # Fingerprint with open incidents subquery, i.e. Firing or Acknowledged -
+        # a resolved/merged/deleted incident shouldn't keep an alert looking "linked"
+        open_subq = (
             select(LastAlert.fingerprint)
             .join(
                 LastAlertToIncident,
@@ -285,7 +286,7 @@ def __build_query_for_filtering(
                 Incident,
                 LastAlertToIncident.incident_id == Incident.id
             )
-            .where(Incident.status == IncidentStatus.FIRING.value)
+            .where(Incident.status.in_(IncidentStatus.get_active(return_values=True)))
             .distinct()
         ).subquery()
 
@@ -300,7 +301,7 @@ def __build_query_for_filtering(
             and_(
                 LastAlertToIncident.tenant_id == Incident.tenant_id,
                 LastAlertToIncident.incident_id == Incident.id,
-                LastAlert.fingerprint.in_(select(firing_subq.c.fingerprint))
+                LastAlert.fingerprint.in_(select(open_subq.c.fingerprint))
             ),
         )
 

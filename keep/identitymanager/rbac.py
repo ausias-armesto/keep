@@ -52,10 +52,37 @@ class Role:
         return True
 
 
-# Noc has read permissions and it can assign itself to alert
+# Noc has read/write on alerts and incidents, read-only visibility into how the
+# alert pipeline is configured, and read/write on maintenance windows.
+# Explicitly excludes dashboards, topology, providers, settings (SMTP/API keys/SSO/
+# users/roles) and secrets (raw workflow credentials) — those stay admin-only.
 class Noc(Role):
-    SCOPES = ["read:*", "execute:workflows"]
-    DESCRIPTION = "read permissions and assign itself to alert"
+    SCOPES = [
+        # core alert/incident work
+        "read:alert",
+        "write:alert",
+        "read:incident",
+        "read:incidents",
+        "write:incident",
+        # saved views (both scope names are needed to browse presets in the UI)
+        "read:preset",
+        "read:presets",
+        # live updates in the UI
+        "read:pusher",
+        # maintenance/silence windows
+        "read:maintenance",
+        "write:maintenance",
+        # read-only visibility into pipeline configuration (no write, no secrets)
+        "read:rules",
+        "read:extraction",
+        "read:actions",
+        "read:deduplications",
+        "read:workflows",
+        "execute:workflows",
+    ]
+    DESCRIPTION = (
+        "Can do daily operations on alerts, incidents and maintenance windows"
+    )
 
 
 # Admin has all permissions

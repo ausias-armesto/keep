@@ -16,11 +16,14 @@ from keep.api.core.db import (
     get_all_deduplication_stats,
     get_custom_deduplication_rule,
     get_deduplication_rule_by_id,
+    get_last_alert_by_correlation_fingerprint,
+    get_last_alert_correlation_state_by_fingerprint,
     get_last_alert_hashes_by_fingerprints,
     update_deduplication_rule,
 )
 from keep.api.models.alert import (
     AlertDto,
+    AlertStatus,
     DeduplicationRuleDto,
     DeduplicationRuleRequestDto,
 )
@@ -173,6 +176,44 @@ class AlertDeduplicator:
                         deduplication_type="none",
                         provider_id=alert.providerId,
                         provider_type=alert.providerType,
+                    )
+
+        if alert.correlation_fingerprint:
+            if alert.status in (
+                AlertStatus.RESOLVED.value,
+                AlertStatus.SUPPRESSED.value,
+            ):
+                # Resolving/suppressing an alert isn't a new correlation decision —
+                # carry forward whatever this exact fingerprint's last event already
+                # had, instead of asking "who's the active representative right now"
+                # (which excludes resolved/suppressed alerts and would otherwise
+                # reset this alert's own is_correlated/correlated_to back to
+                # "uncorrelated" once every other group member has also resolved).
+                is_correlated, correlated_to = (
+                    get_last_alert_correlation_state_by_fingerprint(
+                        self.tenant_id, alert.fingerprint
+                    )
+                )
+                alert.is_correlated = is_correlated
+                alert.correlated_to = correlated_to
+            else:
+                representative_fingerprint = get_last_alert_by_correlation_fingerprint(
+                    self.tenant_id, alert.correlation_fingerprint
+                )
+                if (
+                    representative_fingerprint
+                    and representative_fingerprint != alert.fingerprint
+                ):
+                    alert.is_correlated = True
+                    alert.correlated_to = representative_fingerprint
+                    self.logger.info(
+                        "Alert correlated to existing alert",
+                        extra={
+                            "alert_id": alert.id,
+                            "correlated_to": representative_fingerprint,
+                            "correlation_fingerprint": alert.correlation_fingerprint,
+                            "tenant_id": self.tenant_id,
+                        },
                     )
 
         return alert
@@ -335,6 +376,7 @@ class AlertDeduplicator:
                 dedup_ratio=0.0,
                 enabled=rule.enabled,
                 is_provisioned=rule.is_provisioned,
+                rule_type=rule.rule_type,
             )
             for rule in custom_deduplications
         ]
@@ -515,6 +557,7 @@ class AlertDeduplicator:
             full_deduplication=rule.full_deduplication,
             ignore_fields=rule.ignore_fields or [],
             priority=0,
+            rule_type=rule.rule_type,
         )
 
         return new_rule
@@ -572,6 +615,7 @@ class AlertDeduplicator:
             full_deduplication=rule.full_deduplication,
             ignore_fields=rule.ignore_fields or [],
             priority=0,
+            rule_type=rule.rule_type,
         )
 
         return updated_rule

@@ -19,10 +19,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # 6.0.3
       - name: Setup GCP
-        uses: hoprnet/hopr-workflows/actions/setup-gcp@ac3e0b6137b0ba470a30c373aab2ceba9e0879e4
+        id: gcp
+        uses: hoprnet/hopr-workflows/actions/setup-gcp@setup-gcp-v4.0.1
         with:
-          workload_identity_provider: ${{ vars.HOPRNET_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ vars.HOPRNET_SERVICE_ACCOUNT }}
+          workload_identity_provider: projects/277369779617/locations/global/workloadIdentityPools/github-workflow-pool/providers/github-provider
+          service_account: github-workflows@hoprassociation.iam.gserviceaccount.com
           login_artifact_registry: 'true'
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # 4.1.0
@@ -48,10 +49,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # 6.0.3
       - name: Setup GCP
-        uses: hoprnet/hopr-workflows/actions/setup-gcp@ac3e0b6137b0ba470a30c373aab2ceba9e0879e4
+        id: gcp
+        uses: hoprnet/hopr-workflows/actions/setup-gcp@setup-gcp-v4.0.1
         with:
-          workload_identity_provider: ${{ vars.HOPRNET_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ vars.HOPRNET_SERVICE_ACCOUNT }}
+          workload_identity_provider: projects/277369779617/locations/global/workloadIdentityPools/github-workflow-pool/providers/github-provider
+          service_account: github-workflows@hoprassociation.iam.gserviceaccount.com
           login_artifact_registry: 'true'
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # 4.1.0
