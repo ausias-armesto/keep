@@ -490,10 +490,7 @@ class IncidentBl:
             },
         )
 
-        with_alerts = new_status in [
-            IncidentStatus.RESOLVED,
-            IncidentStatus.ACKNOWLEDGED,
-        ]
+        with_alerts = new_status == IncidentStatus.RESOLVED
         incident = get_incident_by_id(
             self.tenant_id, incident_id, with_alerts=with_alerts, session=self.session
         )
@@ -501,7 +498,7 @@ class IncidentBl:
         if not incident:
             raise HTTPException(status_code=404, detail="Incident not found")
 
-        if new_status in [IncidentStatus.RESOLVED, IncidentStatus.ACKNOWLEDGED]:
+        if new_status == IncidentStatus.RESOLVED:
             enrichments = {"status": new_status.value}
             fingerprints = [alert.fingerprint for alert in incident.alerts]
             enrichments_bl = EnrichmentsBl(self.tenant_id, db=self.session)
