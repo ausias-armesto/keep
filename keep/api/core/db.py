@@ -2590,6 +2590,19 @@ def get_custom_deduplication_rule(tenant_id, provider_id, provider_type):
             .where(AlertDeduplicationRule.tenant_id == tenant_id)
             .where(AlertDeduplicationRule.provider_id == provider_id)
             .where(AlertDeduplicationRule.provider_type == provider_type)
+            .where(AlertDeduplicationRule.rule_type == "split")
+        ).first()
+    return rule
+
+
+def get_correlation_deduplication_rule(tenant_id, provider_id, provider_type):
+    with Session(engine) as session:
+        rule = session.exec(
+            select(AlertDeduplicationRule)
+            .where(AlertDeduplicationRule.tenant_id == tenant_id)
+            .where(AlertDeduplicationRule.provider_id == provider_id)
+            .where(AlertDeduplicationRule.provider_type == provider_type)
+            .where(AlertDeduplicationRule.rule_type == "correlate")
         ).first()
     return rule
 
@@ -2607,6 +2620,7 @@ def create_deduplication_rule(
     ignore_fields: list[str] = [],
     priority: int = 0,
     is_provisioned: bool = False,
+    rule_type: str = "split",
 ):
     with Session(engine) as session:
         new_rule = AlertDeduplicationRule(
@@ -2623,6 +2637,7 @@ def create_deduplication_rule(
             ignore_fields=ignore_fields,
             priority=priority,
             is_provisioned=is_provisioned,
+            rule_type=rule_type,
         )
         session.add(new_rule)
         session.commit()
@@ -2643,6 +2658,7 @@ def update_deduplication_rule(
     full_deduplication: bool = False,
     ignore_fields: list[str] = [],
     priority: int = 0,
+    rule_type: str = "split",
 ):
     rule_uuid = __convert_to_uuid(rule_id)
     if not rule_uuid:
@@ -2667,6 +2683,7 @@ def update_deduplication_rule(
         rule.full_deduplication = full_deduplication
         rule.ignore_fields = ignore_fields
         rule.priority = priority
+        rule.rule_type = rule_type
 
         session.add(rule)
         session.commit()
@@ -5705,6 +5722,71 @@ def get_last_alert_by_fingerprint(
         return session.exec(query).first()
 
 
+def get_last_alert_by_correlation_fingerprint(
+    tenant_id: str, correlation_fingerprint: str
+) -> Optional[str]:
+    """Return the fingerprint of the oldest active alert in a correlation group.
+
+    Ordering by first_timestamp ASC gives a stable representative even after
+    subsequent group members are stored. Only a currently-active
+    (non-resolved/suppressed) alert is eligible as a representative.
+
+    A resolved/suppressed alert is never eligible, even if it's still linked
+    to an incident that itself hasn't been resolved: a `correlate` rule's
+    fingerprint_fields are often intentionally broad (e.g. just namespace +
+    app name) so that several *different* alert types sharing a root cause
+    join the same incident. If a resolved alert were kept eligible while its
+    incident stays open, an unrelated new alert type that later happens to
+    share that broad fingerprint would get silently attached to that old,
+    already-closed-in-practice alert's lineage instead of being recognized as
+    a fresh, independent problem. Once nothing in the group is still active,
+    the next alert to arrive starts a new group and becomes the new
+    representative going forward - a resolved alert never permanently blocks
+    a group from re-forming around a fresh active alert.
+    """
+    with Session(engine) as session:
+        status_field = get_json_extract_field(session, Alert.event, "status")
+        last_alert = session.exec(
+            select(LastAlert)
+            .join(Alert, Alert.id == LastAlert.alert_id)
+            .where(LastAlert.tenant_id == tenant_id)
+            .where(LastAlert.correlation_fingerprint == correlation_fingerprint)
+            .where(status_field.notin_(["resolved", "suppressed"]))
+            .order_by(LastAlert.first_timestamp)
+            .limit(1)
+        ).first()
+    return last_alert.fingerprint if last_alert else None
+
+
+def get_last_alert_correlation_state_by_fingerprint(
+    tenant_id: str, fingerprint: str
+) -> tuple[bool, Optional[str]]:
+    """Return (is_correlated, correlated_to) as last stored for this exact fingerprint.
+
+    Used to carry an alert's correlation state forward across its own status
+    transitions (e.g. firing -> resolved), instead of re-deriving it from
+    get_last_alert_by_correlation_fingerprint, which only considers currently
+    active alerts and would otherwise reset an alert's own resolve/suppress
+    event back to "uncorrelated" once every other group member has also
+    resolved.
+    """
+    with Session(engine) as session:
+        last_alert = session.exec(
+            select(LastAlert)
+            .where(LastAlert.tenant_id == tenant_id)
+            .where(LastAlert.fingerprint == fingerprint)
+        ).first()
+        if not last_alert:
+            return False, None
+        alert = session.get(Alert, last_alert.alert_id)
+        if not alert:
+            return False, None
+        return (
+            bool(alert.event.get("is_correlated", False)),
+            alert.event.get("correlated_to"),
+        )
+
+
 def set_last_alert(
     tenant_id: str, alert: Alert, session: Optional[Session] = None, max_retries=3
 ) -> None:
@@ -5743,6 +5825,9 @@ def set_last_alert(
                     last_alert.timestamp = alert.timestamp
                     last_alert.alert_id = alert.id
                     last_alert.alert_hash = alert.alert_hash
+                    last_alert.correlation_fingerprint = alert.event.get(
+                        "correlation_fingerprint"
+                    )
                     session.add(last_alert)
 
                 elif not last_alert:
@@ -5754,6 +5839,9 @@ def set_last_alert(
                         first_timestamp=alert.timestamp,
                         alert_id=alert.id,
                         alert_hash=alert.alert_hash,
+                        correlation_fingerprint=alert.event.get(
+                            "correlation_fingerprint"
+                        ),
                     )
 
                 session.add(last_alert)
