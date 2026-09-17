@@ -166,8 +166,8 @@ export default function CreateOrUpdateMaintenanceRule({
   };
 
   const ignoreText = !suppress
-    ? "Alerts will not show in feed"
-    : "Alerts will show in suppressed status";
+    ? "Drop matching alerts entirely (not stored, no workflows)"
+    : "Keep matching alerts but mark them as suppressed";
 
   return (
     <form
