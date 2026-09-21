@@ -19,6 +19,7 @@ services:
       - "8080:8080"
     environment:
       - PORT=8080
+      - POSTHOG_DISABLED=true
       - SECRET_MANAGER_TYPE=FILE
       - SECRET_MANAGER_DIRECTORY=/state
       - DATABASE_CONNECTION_STRING=sqlite:////state/db.sqlite3?check_same_thread=False
