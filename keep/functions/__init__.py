@@ -654,6 +654,52 @@ def dict_merge(*args) -> dict:
 
         if isinstance(data, dict):
             result.update(data)
-            
+
     return result
+
+
+def first_open_incident_id(alerts: list, open_statuses: list = None) -> str:
+    """
+    Given a list of alert dicts sharing a correlation group (e.g. as returned
+    by /alerts/query with with_incidents=True, filtered by correlation_fingerprint),
+    return the id of the first incident - among any of those alerts' linked
+    incidents - whose status is still open.
+
+    This lets a workflow link a new occurrence of a correlation group to
+    whichever incident the group is already active in, without depending on
+    a single designated "representative" alert: any group member that
+    already carries an open incident is enough, even if the representative
+    itself has since resolved or moved on.
+
+    Args:
+        alerts (list): list of alert dicts, each optionally containing an
+            "incident_dto" list (as populated by with_incidents=True).
+        open_statuses (list): incident statuses considered "open".
+            Defaults to ["firing", "acknowledged"].
+
+    Returns:
+        str: the first open incident's id, or "" if none found.
+
+    Example:
+        >>> alerts = [{"incident_dto": [{"id": "abc", "status": "resolved"}]},
+        ...           {"incident_dto": [{"id": "def", "status": "firing"}]}]
+        >>> first_open_incident_id(alerts)
+        'def'
+    """
+    if open_statuses is None:
+        open_statuses = ["firing", "acknowledged"]
+
+    if not isinstance(alerts, list):
+        return ""
+
+    for alert in alerts:
+        if not isinstance(alert, dict):
+            continue
+        for incident in alert.get("incident_dto") or []:
+            if not isinstance(incident, dict):
+                continue
+            if incident.get("status") in open_statuses:
+                return str(incident.get("id", ""))
+
+    return ""
 

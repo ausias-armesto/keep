@@ -5745,13 +5745,34 @@ def get_last_alert_by_correlation_fingerprint(
     a group from re-forming around a fresh active alert.
     """
     with Session(engine) as session:
-        status_field = get_json_extract_field(session, Alert.event, "status")
+        # Effective status must fall back through enrichment first: enrichment
+        # (e.g. a manual resolve, or the incident-resolve cascade in
+        # IncidentBl.change_status) never touches Alert.event - it's stored
+        # separately in AlertEnrichment and only merged into the status the
+        # API/UI show at read time (see convert_db_alerts_to_dto_alerts). An
+        # alert resolved that way would still read "firing" from Alert.event
+        # alone and never be excluded here, permanently pinning the group to
+        # a dead representative.
+        raw_status_field = get_json_extract_field(session, Alert.event, "status")
+        enriched_status_field = get_json_extract_field(
+            session, AlertEnrichment.enrichments, "status"
+        )
+        effective_status_field = func.coalesce(
+            enriched_status_field, raw_status_field
+        )
         last_alert = session.exec(
             select(LastAlert)
             .join(Alert, Alert.id == LastAlert.alert_id)
+            .outerjoin(
+                AlertEnrichment,
+                and_(
+                    AlertEnrichment.alert_fingerprint == LastAlert.fingerprint,
+                    AlertEnrichment.tenant_id == tenant_id,
+                ),
+            )
             .where(LastAlert.tenant_id == tenant_id)
             .where(LastAlert.correlation_fingerprint == correlation_fingerprint)
-            .where(status_field.notin_(["resolved", "suppressed"]))
+            .where(effective_status_field.notin_(["resolved", "suppressed"]))
             .order_by(LastAlert.first_timestamp)
             .limit(1)
         ).first()

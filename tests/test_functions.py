@@ -1262,3 +1262,40 @@ def test_dict_merge():
     result = functions.dict_merge(d1, "invalid", {"e": 7})
     assert result == {"a": 1, "b": 2, "e": 7}
 
+
+def test_first_open_incident_id_finds_open_among_resolved():
+    alerts = [
+        {"incident_dto": [{"id": "resolved-1", "status": "resolved"}]},
+        {"incident_dto": [{"id": "open-1", "status": "firing"}]},
+    ]
+    assert functions.first_open_incident_id(alerts) == "open-1"
+
+
+def test_first_open_incident_id_acknowledged_counts_as_open():
+    alerts = [{"incident_dto": [{"id": "ack-1", "status": "acknowledged"}]}]
+    assert functions.first_open_incident_id(alerts) == "ack-1"
+
+
+def test_first_open_incident_id_no_open_incident():
+    alerts = [
+        {"incident_dto": [{"id": "resolved-1", "status": "resolved"}]},
+        {"incident_dto": []},
+        {},
+    ]
+    assert functions.first_open_incident_id(alerts) == ""
+
+
+def test_first_open_incident_id_empty_or_invalid_input():
+    assert functions.first_open_incident_id([]) == ""
+    assert functions.first_open_incident_id(None) == ""
+    assert functions.first_open_incident_id("not-a-list") == ""
+
+
+def test_first_open_incident_id_custom_open_statuses():
+    alerts = [{"incident_dto": [{"id": "merged-1", "status": "merged"}]}]
+    assert functions.first_open_incident_id(alerts) == ""
+    assert (
+        functions.first_open_incident_id(alerts, open_statuses=["merged"])
+        == "merged-1"
+    )
+

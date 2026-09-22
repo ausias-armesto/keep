@@ -13,12 +13,14 @@ from datetime import datetime
 
 import pytest
 
+from keep.api.bl.enrichments_bl import EnrichmentsBl
 from keep.api.core.db import (
     add_alerts_to_incident,
     get_last_alert_by_correlation_fingerprint,
     get_last_alerts,
 )
 from keep.api.core.dependencies import SINGLE_TENANT_UUID
+from keep.api.models.action_type import ActionType
 from keep.api.models.alert import AlertDto, AlertStatus
 from keep.api.models.db.alert import Alert, AlertDeduplicationRule, AlertEnrichment, LastAlert
 from keep.api.models.db.incident import Incident, IncidentSeverity, IncidentStatus
@@ -285,6 +287,50 @@ def test_resolved_representative_with_open_incident_does_not_correlate(db_sessio
     create_alert("fp-open-new", AlertStatus.FIRING, datetime.utcnow(), _alert_details("same-alert-open"))
 
     new_alert = db_session.query(Alert).filter(Alert.fingerprint == "fp-open-new").first()
+    assert new_alert.event.get("is_correlated") is False
+    assert new_alert.event.get("correlated_to") is None
+
+
+def test_enrichment_resolved_representative_does_not_block_new_group(
+    db_session, create_alert
+):
+    """
+    Regression test for a real production bug.
+
+    A representative alert can be marked resolved purely through enrichment
+    (e.g. a manual resolve, or an incident-resolve cascade) rather than a
+    fresh "resolved" event from the source. Enrichment is stored separately
+    from the alert's raw event and only merged into the status shown by the
+    API/UI - the underlying Alert.event.status is never updated. The
+    eligibility check must honor that enriched status, not just the raw one,
+    or a representative resolved this way can never be excluded and
+    permanently blocks its group from re-forming around a fresh active alert.
+    """
+    _add_rule(db_session, "correlate", ["name"])
+
+    create_alert(
+        "fp-enrich-rep", AlertStatus.FIRING, datetime.utcnow(), _alert_details("same-alert-enrich")
+    )
+    rep = db_session.query(Alert).filter(Alert.fingerprint == "fp-enrich-rep").first()
+    assert rep.event.get("status") == AlertStatus.FIRING.value
+
+    # Resolve purely via enrichment - Alert.event.status is left untouched.
+    EnrichmentsBl(tenant_id=SINGLE_TENANT_UUID, db=db_session).enrich_entity(
+        fingerprint="fp-enrich-rep",
+        enrichments={"status": AlertStatus.RESOLVED.value},
+        action_type=ActionType.MANUAL_STATUS_CHANGE,
+        action_callee="test",
+        action_description="test enrichment resolve",
+    )
+    db_session.refresh(rep)
+    assert rep.event.get("status") == AlertStatus.FIRING.value  # raw event unchanged
+
+    # A new alert in the same group must NOT correlate to the enrichment-resolved
+    # representative - it should start a fresh group instead.
+    create_alert(
+        "fp-enrich-new", AlertStatus.FIRING, datetime.utcnow(), _alert_details("same-alert-enrich")
+    )
+    new_alert = db_session.query(Alert).filter(Alert.fingerprint == "fp-enrich-new").first()
     assert new_alert.event.get("is_correlated") is False
     assert new_alert.event.get("correlated_to") is None
 
