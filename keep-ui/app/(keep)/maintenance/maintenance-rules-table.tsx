@@ -46,6 +46,12 @@ export default function MaintenanceRulesTable({
       header: "",
       cell: (context) => (
         <div className={"space-x-1 flex flex-row items-center justify-center"}>
+          <Icon
+            icon={context.row.original.enabled ? IoCheckmark : HiMiniXMark}
+            size="md"
+            color={context.row.original.enabled ? "orange" : "red"}
+            tooltip={context.row.original.enabled ? "Enabled" : "Disabled"}
+          />
           <Button
             color="orange"
             size="xs"
@@ -77,39 +83,47 @@ export default function MaintenanceRulesTable({
     columnHelper.display({
       id: "description",
       header: "Description",
-      cell: (context) => context.row.original.description,
+      cell: (context) => (
+        <div className="min-w-[200px] max-w-[350px] whitespace-normal break-words">
+          {context.row.original.description}
+        </div>
+      ),
     }),
     columnHelper.display({
       id: "start_time",
       header: "Start Time",
-      cell: (context) =>
-        new Date(context.row.original.start_time + "Z").toLocaleString(),
+      cell: (context) => {
+        const d = new Date(context.row.original.start_time + "Z");
+        return (
+          <div>
+            <div>{d.toLocaleDateString()}</div>
+            <div className="text-xs text-gray-500">{d.toLocaleTimeString()}</div>
+          </div>
+        );
+      },
     }),
     columnHelper.display({
       id: "CEL",
       header: "CEL",
-      cell: (context) => context.row.original.cel_query,
+      cell: (context) => (
+        <div className="max-w-[350px] truncate" title={context.row.original.cel_query}>
+          {context.row.original.cel_query}
+        </div>
+      ),
     }),
     columnHelper.display({
       id: "end_time",
       header: "End Time",
-      cell: (context) =>
-        context.row.original.end_time
-          ? new Date(context.row.original.end_time + "Z").toLocaleString()
-          : "N/A",
-    }),
-    columnHelper.display({
-      id: "enabled",
-      header: "Enabled",
-      cell: (context) => (
-        <div>
-          {context.row.original.enabled ? (
-            <Icon icon={IoCheckmark} size="md" color="orange" />
-          ) : (
-            <Icon icon={HiMiniXMark} size="md" color="orange" />
-          )}
-        </div>
-      ),
+      cell: (context) => {
+        if (!context.row.original.end_time) return "N/A";
+        const d = new Date(context.row.original.end_time + "Z");
+        return (
+          <div>
+            <div>{d.toLocaleDateString()}</div>
+            <div className="text-xs text-gray-500">{d.toLocaleTimeString()}</div>
+          </div>
+        );
+      },
     }),
   ] as DisplayColumnDef<MaintenanceRule>[];
 
@@ -179,22 +193,17 @@ export default function MaintenanceRulesTable({
                       <span className="font-bold">Created By:</span>
                       <span>{row.original.created_by}</span>
                     </div>
-                    {row.original.updated_at && (
-                      <>
+                    {(() => {
+                      const d = row.original.updated_at
+                        ? new Date(row.original.updated_at + "Z")
+                        : null;
+                      return d && !isNaN(d.getTime()) ? (
                         <div className="flex items-center space-x-2 pl-2.5">
                           <span className="font-bold">Updated At:</span>
-                          <span>
-                            {new Date(
-                              row.original.updated_at + "Z"
-                            ).toLocaleString()}
-                          </span>
+                          <span>{d.toLocaleString()}</span>
                         </div>
-                        <div className="flex items-center space-x-2 pl-2.5">
-                          <span className="font-bold">Enabled:</span>
-                          <span>{row.original.enabled ? "Yes" : "No"}</span>
-                        </div>
-                      </>
-                    )}
+                      ) : null;
+                    })()}
                   </div>
                 </TableCell>
               </TableRow>

@@ -1262,3 +1262,73 @@ def test_dict_merge():
     result = functions.dict_merge(d1, "invalid", {"e": 7})
     assert result == {"a": 1, "b": 2, "e": 7}
 
+
+def test_first_open_incident_id_finds_open_among_resolved():
+    alerts = [
+        {"incident_dto": [{"id": "resolved-1", "status": "resolved"}]},
+        {"incident_dto": [{"id": "open-1", "status": "firing"}]},
+    ]
+    assert functions.first_open_incident_id(alerts) == "open-1"
+
+
+def test_first_open_incident_id_acknowledged_counts_as_open():
+    alerts = [{"incident_dto": [{"id": "ack-1", "status": "acknowledged"}]}]
+    assert functions.first_open_incident_id(alerts) == "ack-1"
+
+
+def test_first_open_incident_id_no_open_incident():
+    alerts = [
+        {"incident_dto": [{"id": "resolved-1", "status": "resolved"}]},
+        {"incident_dto": []},
+        {},
+    ]
+    assert functions.first_open_incident_id(alerts) == ""
+
+
+def test_first_open_incident_id_empty_or_invalid_input():
+    assert functions.first_open_incident_id([]) == ""
+    assert functions.first_open_incident_id(None) == ""
+    assert functions.first_open_incident_id("not-a-list") == ""
+
+
+def test_first_open_incident_id_called_with_no_arguments():
+    """
+    Regression test for a real production bug.
+
+    A workflow calls keep.first_open_incident_id({{ steps.x.results.body.results }}).
+    When that step's query returns zero results, mustache renders the empty
+    list as an empty string (not "[]"), collapsing the call into a bare
+    keep.first_open_incident_id() with no argument at all - previously a
+    TypeError that failed the whole workflow run.
+    """
+    assert functions.first_open_incident_id() == ""
+
+
+def test_first_open_incident_id_mustache_empty_list_renders_as_no_args():
+    """
+    Confirms the exact mechanism behind the production bug: chevron renders
+    an empty list substituted into a plain {{ }} tag as an empty string, not
+    "[]", so the templated function call ends up with no arguments - unlike
+    a non-empty list, which renders as a normal Python list literal.
+    """
+    import chevron
+
+    empty_call = chevron.render(
+        "keep.first_open_incident_id({{ x }})", {"x": []}
+    )
+    assert empty_call == "keep.first_open_incident_id()"
+
+    nonempty_call = chevron.render(
+        "keep.first_open_incident_id({{ x }})", {"x": [{"id": 1}]}
+    )
+    assert nonempty_call == "keep.first_open_incident_id([{'id': 1}])"
+
+
+def test_first_open_incident_id_custom_open_statuses():
+    alerts = [{"incident_dto": [{"id": "merged-1", "status": "merged"}]}]
+    assert functions.first_open_incident_id(alerts) == ""
+    assert (
+        functions.first_open_incident_id(alerts, open_statuses=["merged"])
+        == "merged-1"
+    )
+

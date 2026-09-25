@@ -1652,6 +1652,66 @@ async def test_search_no_incidents_scenario_2(
 @pytest.mark.parametrize(
     "cel_query, n_alerts",
     [
+        ("incident.id==null", 0),
+        ("incident.id!=null", 1),
+    ],
+)
+@pytest.mark.asyncio
+async def test_search_no_incidents_acknowledged_incident(
+    create_alert, db_session, cel_query, n_alerts
+):
+    """
+    Feature: Search incidents linked to Alerts
+    Scenario: An alert linked to an ACKNOWLEDGED (not firing) incident must
+            still be treated as "has an incident" - incident.id==null should
+            find 0 alerts, and incident.id!=null should find the 1 linked
+            alert. Only resolved/merged/deleted incidents should make an
+            alert look unlinked.
+    """
+    #GIVEN One ACKNOWLEDGED incident
+    incident_bl = IncidentBl(
+                tenant_id=SINGLE_TENANT_UUID, session=db_session
+            )
+
+    incident_dto_1 = incident_bl.create_incident(IncidentDtoIn(
+                **{
+                    "user_generated_name": "Incident name",
+                    "user_summary": "Keep: Incident description",
+                    "status": "acknowledged",
+                    "resolve_on": ResolveOn.NEVER.value
+
+                }
+            ))
+    #AND The Firing alert linked to the acknowledged incident.
+    create_alert(
+                "alert-test-1",
+                AlertStatus("firing"),
+                datetime.datetime.utcnow(),
+                {},
+            )
+    await incident_bl.add_alerts_to_incident(
+                incident_dto_1.id, ["alert-test-1"]
+            )
+
+    auth = AuthenticatedEntity(tenant_id=SINGLE_TENANT_UUID, email="test")
+    db_session.expire_all()
+    #WHEN I search for alerts linked to incidents
+    result_query = query_alerts(
+        request=MagicMock(),
+        query=QueryDto(
+            cel=cel_query,
+        ),
+        bg_tasks=MagicMock(),
+        authenticated_entity=auth,
+    )
+    #THEN I should get only the alerts following the CEL expression
+    assert len(result_query["results"]) == n_alerts
+    assert result_query["count"] == n_alerts
+
+
+@pytest.mark.parametrize(
+    "cel_query, n_alerts",
+    [
         ("incident.is_visible==false", 1),
         ("(incident.is_visible==false || incident.id==null)", 2),
     ],
