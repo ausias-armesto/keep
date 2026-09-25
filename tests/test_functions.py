@@ -1291,6 +1291,39 @@ def test_first_open_incident_id_empty_or_invalid_input():
     assert functions.first_open_incident_id("not-a-list") == ""
 
 
+def test_first_open_incident_id_called_with_no_arguments():
+    """
+    Regression test for a real production bug.
+
+    A workflow calls keep.first_open_incident_id({{ steps.x.results.body.results }}).
+    When that step's query returns zero results, mustache renders the empty
+    list as an empty string (not "[]"), collapsing the call into a bare
+    keep.first_open_incident_id() with no argument at all - previously a
+    TypeError that failed the whole workflow run.
+    """
+    assert functions.first_open_incident_id() == ""
+
+
+def test_first_open_incident_id_mustache_empty_list_renders_as_no_args():
+    """
+    Confirms the exact mechanism behind the production bug: chevron renders
+    an empty list substituted into a plain {{ }} tag as an empty string, not
+    "[]", so the templated function call ends up with no arguments - unlike
+    a non-empty list, which renders as a normal Python list literal.
+    """
+    import chevron
+
+    empty_call = chevron.render(
+        "keep.first_open_incident_id({{ x }})", {"x": []}
+    )
+    assert empty_call == "keep.first_open_incident_id()"
+
+    nonempty_call = chevron.render(
+        "keep.first_open_incident_id({{ x }})", {"x": [{"id": 1}]}
+    )
+    assert nonempty_call == "keep.first_open_incident_id([{'id': 1}])"
+
+
 def test_first_open_incident_id_custom_open_statuses():
     alerts = [{"incident_dto": [{"id": "merged-1", "status": "merged"}]}]
     assert functions.first_open_incident_id(alerts) == ""

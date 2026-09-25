@@ -658,7 +658,7 @@ def dict_merge(*args) -> dict:
     return result
 
 
-def first_open_incident_id(alerts: list, open_statuses: list = None) -> str:
+def first_open_incident_id(alerts: list = None, open_statuses: list = None) -> str:
     """
     Given a list of alert dicts sharing a correlation group (e.g. as returned
     by /alerts/query with with_incidents=True, filtered by correlation_fingerprint),
@@ -670,6 +670,17 @@ def first_open_incident_id(alerts: list, open_statuses: list = None) -> str:
     a single designated "representative" alert: any group member that
     already carries an open incident is enough, even if the representative
     itself has since resolved or moved on.
+
+    `alerts` defaults to None (treated the same as an empty list, below) so
+    that calling this with no arguments is valid. That matters because the
+    typical call site renders {{ steps.x.results.body.results }} directly
+    into the argument list via mustache - and mustache renders an empty
+    Python list as an empty string, not the text "[]", collapsing
+    `keep.first_open_incident_id({{ ... }})` into a bare, argument-less
+    `keep.first_open_incident_id()` whenever that step's query legitimately
+    returns zero results (e.g. no sibling has an open incident yet - the
+    common case, not an edge case). Without this default, that's a
+    TypeError that fails the whole workflow run instead of "no match".
 
     Args:
         alerts (list): list of alert dicts, each optionally containing an
