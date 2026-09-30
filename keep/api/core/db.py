@@ -4242,6 +4242,7 @@ def get_incident_alerts_and_links_by_incident_id(
     offset: Optional[int] = 0,
     session: Optional[Session] = None,
     include_unlinked: bool = False,
+    hide_resolved: bool = True,
 ) -> tuple[List[tuple[Alert, LastAlertToIncident]], int]:
     with existed_or_new_session(session) as session:
 
@@ -4259,16 +4260,63 @@ def get_incident_alerts_and_links_by_incident_id(
                 ),
             )
             .join(Alert, LastAlert.alert_id == Alert.id)
+            .outerjoin(
+                AlertEnrichment,
+                and_(
+                    Alert.tenant_id == AlertEnrichment.tenant_id,
+                    Alert.fingerprint == AlertEnrichment.alert_fingerprint,
+                ),
+            )
             .filter(
                 LastAlertToIncident.tenant_id == tenant_id,
                 LastAlertToIncident.incident_id == incident_id,
             )
-            .order_by(col(LastAlert.timestamp).desc())
+            .order_by(
+                # Firing/acknowledged alerts first (enriched status wins over
+                # the raw one), then most recently received.
+                case(
+                    (
+                        func.lower(
+                            func.coalesce(
+                                get_json_extract_field(
+                                    session, AlertEnrichment.enrichments, "status"
+                                ),
+                                get_json_extract_field(
+                                    session, Alert.event, "status"
+                                ),
+                            )
+                        ).in_(
+                            [
+                                AlertStatus.FIRING.value,
+                                AlertStatus.ACKNOWLEDGED.value,
+                            ]
+                        ),
+                        0,
+                    ),
+                    else_=1,
+                ),
+                col(LastAlert.timestamp).desc(),
+            )
             .options(joinedload(Alert.alert_enrichment))
         )
         if not include_unlinked:
             query = query.filter(
                 LastAlertToIncident.deleted_at == NULL_FOR_DELETED_AT,
+            )
+        if hide_resolved:
+            effective_status = func.lower(
+                func.coalesce(
+                    get_json_extract_field(
+                        session, AlertEnrichment.enrichments, "status"
+                    ),
+                    get_json_extract_field(session, Alert.event, "status"),
+                )
+            )
+            query = query.filter(
+                or_(
+                    effective_status.is_(None),
+                    effective_status != AlertStatus.RESOLVED.value,
+                )
             )
 
     total_count = query.count()

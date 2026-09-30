@@ -5,7 +5,7 @@ import {
   PaginatedIncidentsDto,
 } from "@/entities/incidents/model";
 import { PaginatedWorkflowExecutionDto } from "@/shared/api/workflow-executions";
-import useSWR, { SWRConfiguration } from "swr";
+import useSWR, { SWRConfiguration, useSWRConfig } from "swr";
 import { useWebsocket } from "./usePusher";
 import { use, useCallback, useEffect, useState } from "react";
 import { useAlerts } from "@/entities/alerts/model/useAlerts";
@@ -141,13 +141,16 @@ export const useIncidentAlerts = (
   offset: number = 0,
   options: SWRConfiguration = {
     revalidateOnFocus: false,
-  }
+  },
+  hideResolved: boolean = false
 ) => {
   const api = useApi();
   return useSWR<PaginatedIncidentAlertsDto>(
     () =>
       api.isReady()
-        ? `/incidents/${incidentId}/alerts?limit=${limit}&offset=${offset}`
+        ? `/incidents/${incidentId}/alerts?limit=${limit}&offset=${offset}${
+            hideResolved ? "&hide_resolved=true" : ""
+          }`
         : null,
     async (url) => api.get(url),
     options
@@ -223,12 +226,17 @@ export const usePollIncidentComments = (incidentId: string) => {
 
 export const usePollIncidentAlerts = (incidentId: string) => {
   const { bind, unbind } = useWebsocket();
-  const { mutate } = useIncidentAlerts(incidentId);
+  const { mutate } = useSWRConfig();
   const handleIncoming = useCallback(
     (data: IncidentUpdatePayload) => {
-      mutate();
+      // revalidate every cached variant (pagination, hide_resolved) of this incident's alerts
+      mutate(
+        (key) =>
+          typeof key === "string" &&
+          key.startsWith(`/incidents/${incidentId}/alerts?`)
+      );
     },
-    [mutate]
+    [mutate, incidentId]
   );
   useEffect(() => {
     bind("incident-change", handleIncoming);

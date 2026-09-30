@@ -62,6 +62,8 @@ export default function IncidentAlerts({ incident }: Props) {
     pageSize: 20,
   });
 
+  const [hideResolved, setHideResolved] = useState(true);
+
   const {
     data: alerts,
     isLoading: _alertsLoading,
@@ -70,7 +72,9 @@ export default function IncidentAlerts({ incident }: Props) {
   } = useIncidentAlerts(
     incident.id,
     alertsPagination.limit,
-    alertsPagination.offset
+    alertsPagination.offset,
+    { revalidateOnFocus: false },
+    hideResolved
   );
   const { unlinkAlertsFromIncident } = useIncidentActions();
 
@@ -289,6 +293,19 @@ export default function IncidentAlerts({ incident }: Props) {
         selectedFingerprints={selectedFingerprints}
         resetAlertsSelection={() => table.resetRowSelection()}
       />
+      <label className="flex items-center gap-2 mb-2 text-sm cursor-pointer w-fit">
+        <input
+          type="checkbox"
+          checked={hideResolved}
+          onChange={(e) => {
+            setHideResolved(e.target.checked);
+            setTablePagination((prev) => ({ ...prev, pageIndex: 0 }));
+            setAlertsPagination((prev) => ({ ...prev, offset: 0 }));
+            table.resetRowSelection();
+          }}
+        />
+        Hide resolved alerts
+      </label>
       <Card className="p-0 overflow-x-auto h-[calc(100vh-30rem)]">
         <Table className="[&>table]:table-fixed group">
           <TableHead>
