@@ -62,7 +62,7 @@ export default function IncidentAlerts({ incident }: Props) {
     pageSize: 20,
   });
 
-  const [hideResolved, setHideResolved] = useState(true);
+  const [hideResolved, setHideResolved] = useState(false);
 
   const {
     data: alerts,
