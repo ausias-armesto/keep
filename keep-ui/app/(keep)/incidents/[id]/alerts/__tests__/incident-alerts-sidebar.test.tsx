@@ -430,6 +430,9 @@ describe('IncidentAlerts - AlertSidebar Integration', () => {
 
     render(<IncidentAlerts incident={mockIncident} />);
 
+    // Resolved alerts are hidden by default, so the checkbox must stay reachable
+    fireEvent.click(screen.getByLabelText('Hide resolved alerts'));
+
     expect(screen.getByTestId('empty-state')).toBeInTheDocument();
     expect(screen.getByText('No alerts yet')).toBeInTheDocument();
     expect(screen.getByText('Alerts will show up here as they are correlated into this incident.')).toBeInTheDocument();

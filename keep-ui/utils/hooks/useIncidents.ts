@@ -148,9 +148,7 @@ export const useIncidentAlerts = (
   return useSWR<PaginatedIncidentAlertsDto>(
     () =>
       api.isReady()
-        ? `/incidents/${incidentId}/alerts?limit=${limit}&offset=${offset}${
-            hideResolved ? "&hide_resolved=true" : ""
-          }`
+        ? `/incidents/${incidentId}/alerts?limit=${limit}&offset=${offset}&hide_resolved=${hideResolved}`
         : null,
     async (url) => api.get(url),
     options

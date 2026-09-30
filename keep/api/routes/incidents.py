@@ -548,7 +548,7 @@ def get_incident_alerts(
     limit: int = 25,
     offset: int = 0,
     include_unlinked: bool = False,
-    hide_resolved: bool = True,
+    hide_resolved: bool = False,
     authenticated_entity: AuthenticatedEntity = Depends(
         IdentityManagerFactory.get_auth_verifier(["read:incidents"])
     ),

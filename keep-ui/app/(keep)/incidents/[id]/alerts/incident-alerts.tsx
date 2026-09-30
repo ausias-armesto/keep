@@ -200,7 +200,9 @@ export default function IncidentAlerts({ incident }: Props) {
 
   const router = useRouter();
 
-  if (!isLoading && (alerts?.items ?? []).length === 0) {
+  // When resolved alerts are hidden, an empty page doesn't mean the incident has
+  // no alerts, so keep the table (and the checkbox) visible.
+  if (!isLoading && !hideResolved && (alerts?.items ?? []).length === 0) {
     return (
       <EmptyStateCard
         className="w-full"

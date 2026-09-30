@@ -4242,7 +4242,7 @@ def get_incident_alerts_and_links_by_incident_id(
     offset: Optional[int] = 0,
     session: Optional[Session] = None,
     include_unlinked: bool = False,
-    hide_resolved: bool = True,
+    hide_resolved: bool = False,
 ) -> tuple[List[tuple[Alert, LastAlertToIncident]], int]:
     with existed_or_new_session(session) as session:
 
