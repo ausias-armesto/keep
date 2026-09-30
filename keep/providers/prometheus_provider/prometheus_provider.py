@@ -143,6 +143,7 @@ receivers:
                 else None
             ),
             verify=self.authentication_config.verify,
+            timeout=30,
         )
 
         if response.status_code != 200:
@@ -160,6 +161,7 @@ receivers:
             f"{self.authentication_config.url}/api/v1/alerts",
             auth=auth,
             verify=self.authentication_config.verify,
+            timeout=30,
         )
         response.raise_for_status()
         if not response.ok:

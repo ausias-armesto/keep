@@ -546,6 +546,9 @@ class ProvidersService:
 
             for provider_name, provider_config in env_providers.items():
                 provider_info = provider_config.get("authentication", {})
+                pulling_enabled = provider_config.get("pulling_enabled", True)
+                if isinstance(pulling_enabled, str):
+                    pulling_enabled = pulling_enabled.lower() == "true"
                 install_webhook_env = os.environ.get(
                     "KEEP_PROVIDERS_INSTALL_WEBHOOKS", "true"
                 ).lower() == "true"
@@ -560,6 +563,7 @@ class ProvidersService:
                     installed_provider = get_provider_by_name(
                         tenant_id=tenant_id, provider_name=provider_name
                     )
+                    provider_info["pulling_enabled"] = pulling_enabled
                     ProvidersService.update_provider(
                         tenant_id=tenant_id,
                         provider_id=installed_provider.id,
@@ -580,6 +584,7 @@ class ProvidersService:
                         provider_config=provider_info,
                         provisioned=True,
                         validate_scopes=False,
+                        pulling_enabled=pulling_enabled,
                     )
                     if install_webhook:
                         try:
@@ -619,6 +624,9 @@ class ProvidersService:
                             provider_name = provider_yaml["name"]
                             provider_type = provider_yaml["type"]
                             provider_config = provider_yaml.get("authentication", {})
+                            pulling_enabled = provider_yaml.get("pulling_enabled", True)
+                            if isinstance(pulling_enabled, str):
+                                pulling_enabled = pulling_enabled.lower() == "true"
 
                             install_webhook_env = os.environ.get(
                                 "KEEP_PROVIDERS_INSTALL_WEBHOOKS", "false"
@@ -641,6 +649,7 @@ class ProvidersService:
                                 installed_provider = get_provider_by_name(
                                     tenant_id=tenant_id, provider_name=provider_name
                                 )
+                                provider_config["pulling_enabled"] = pulling_enabled
                                 ProvidersService.update_provider(
                                     tenant_id=tenant_id,
                                     provider_id=installed_provider.id,
@@ -660,6 +669,7 @@ class ProvidersService:
                                 provider_config=provider_config,
                                 provisioned=True,
                                 validate_scopes=False,
+                                pulling_enabled=pulling_enabled,
                             )
                             if install_webhook:
                                 try:

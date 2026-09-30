@@ -548,6 +548,7 @@ def get_incident_alerts(
     limit: int = 25,
     offset: int = 0,
     include_unlinked: bool = False,
+    hide_resolved: bool = False,
     authenticated_entity: AuthenticatedEntity = Depends(
         IdentityManagerFactory.get_auth_verifier(["read:incidents"])
     ),
@@ -577,6 +578,7 @@ def get_incident_alerts(
         limit=limit,
         offset=offset,
         include_unlinked=include_unlinked,
+        hide_resolved=hide_resolved,
     )
 
     enriched_alerts_dto = convert_db_alerts_to_dto_alerts(db_alerts_and_links)
