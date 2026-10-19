@@ -1,4 +1,5 @@
 const { withSentryConfig } = require("@sentry/nextjs");
+const includeSources = process.env.KEEP_INCLUDE_SOURCES === "true";
 
 const isSentryDisabled =
   process.env.SENTRY_DISABLED === "true" ||
@@ -110,10 +111,11 @@ const nextConfig = {
   compiler: {
     removeConsole:
       process.env.NODE_ENV === "production" &&
+      !includeSources &&
       process.env.KEEP_DEBUG !== "true",
   },
   output: "standalone",
-  productionBrowserSourceMaps: !isSentryDisabled,
+  productionBrowserSourceMaps: includeSources || !isSentryDisabled,
   async redirects() {
     const workflowRawYamlRedirects = [
       {
@@ -160,7 +162,7 @@ const nextConfig = {
       process.env.VERCEL_ENV === "production" ||
       process.env.NODE_ENV === "production";
 
-    if (isVercelProdDeploy) {
+    if (isVercelProdDeploy && !includeSources) {
       return {
         beforeFiles: [
           {
@@ -199,10 +201,8 @@ const sentryConfig = {
   // side errors will fail.
   tunnelRoute: "/monitoring",
 
-  // Hides source maps from generated client bundles
-  hideSourceMaps: true,
-  sourceMaps: {
-    deleteSourcemapsAfterUpload: process.env.KEEP_INCLUDE_SOURCES !== "true",
+  sourcemaps: {
+    deleteSourcemapsAfterUpload: !includeSources,
   },
 
   // Automatically tree-shake Sentry logger statements to reduce bundle size
