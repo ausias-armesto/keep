@@ -1,7 +1,7 @@
 import Modal from "@/components/ui/Modal";
 import { Button, Divider, Title } from "@tremor/react";
 import { CreateOrUpdateIncidentForm } from "features/incidents/create-or-update-incident";
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "react-toastify";
 import { useIncidents, usePollIncidents } from "@/utils/hooks/useIncidents";
 import Loading from "@/app/(keep)/loading";
@@ -39,7 +39,20 @@ export const AlertAssociateIncidentModal = ({
   const [selectedIncident, setSelectedIncident] = useState<
     string | undefined
   >();
+  const [moveFromCurrent, setMoveFromCurrent] = useState(false);
   const api = useApi();
+
+  // Map of source incident id -> fingerprints of selected alerts linked to it
+  const linkedIncidents = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const alert of alerts ?? []) {
+      const ids = (alert.incident ?? "").split(",").filter(Boolean);
+      for (const id of ids) {
+        map.set(id, [...(map.get(id) ?? []), alert.fingerprint]);
+      }
+    }
+    return map;
+  }, [alerts]);
 
   const associateAlertsHandler = useCallback(
     async (incidentId: string) => {
@@ -48,6 +61,13 @@ export const AlertAssociateIncidentModal = ({
           `/incidents/${incidentId}/alerts`,
           alerts.map(({ fingerprint }) => fingerprint)
         );
+        if (moveFromCurrent) {
+          // Association is additive, so explicitly unlink from the old incidents
+          for (const [sourceId, fingerprints] of linkedIncidents) {
+            if (sourceId === incidentId) continue;
+            await api.delete(`/incidents/${sourceId}/alerts`, fingerprints);
+          }
+        }
         handleSuccess();
         await mutate();
         toast.success("Alerts associated with incident successfully");
@@ -58,7 +78,7 @@ export const AlertAssociateIncidentModal = ({
         );
       }
     },
-    [alerts, api, handleSuccess, mutate]
+    [alerts, api, handleSuccess, mutate, moveFromCurrent, linkedIncidents]
   );
 
   const handleAssociateAlerts = (e: FormEvent) => {
@@ -94,6 +114,7 @@ export const AlertAssociateIncidentModal = ({
     if (!isOpen) {
       hideCreateIncidentForm();
       setSelectedIncident(undefined);
+      setMoveFromCurrent(false);
     }
   }, [hideCreateIncidentForm, isOpen]);
 
@@ -144,6 +165,16 @@ export const AlertAssociateIncidentModal = ({
             label: getIncidentNameWithCreationTime(incident),
           }))}
         />
+        {linkedIncidents.size > 0 && (
+          <label className="flex items-center gap-2 text-sm text-gray-600">
+            <input
+              type="checkbox"
+              checked={moveFromCurrent}
+              onChange={(e) => setMoveFromCurrent(e.target.checked)}
+            />
+            Also unlink from the incident(s) they are currently linked to
+          </label>
+        )}
         <Divider />
         <div className="flex items-center justify-between gap-6">
           <Button
